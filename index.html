@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiplayer Snake Game</title>
+    <style>
+        body {
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            background-color: #1a1a1a;
+            font-family: Arial, sans-serif;
+            color: #ffffff;
+        }
+        #game {
+            background-color: #000;
+            position: relative;
+            width: 80vw; /* Full width */
+            height: 400px;
+            border: 2px solid #ff5722;
+            box-shadow: 0 0 20px rgba(255, 87, 34, 0.5);
+            margin: 20px;
+            border-radius: 10px;
+        }
+        #chat {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            border-left: 2px solid #ff5722;
+            background-color: #2a2a2a;
+            width: 300px;
+            margin: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(255, 87, 34, 0.5);
+        }
+        #messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            max-height: 300px; /* Limit the height of chat messages */
+            border-radius: 5px;
+            background-color: #333;
+        }
+        #input {
+            display: flex;
+            margin-top: 10px;
+        }
+        #input input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ff5722;
+            border-radius: 4px;
+            outline: none;
+            background-color: #444;
+            color: #ffffff;
+        }
+        #input button {
+            padding: 10px;
+            margin-left: 5px;
+            border: none;
+            background-color: #ff5722;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #input button:hover {
+            background-color: #e64a19;
+        }
+        #disconnectButton {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #d32f2f;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #disconnectButton:hover {
+            background-color: #c62828;
+        }
+        .snake-segment {
+            position: absolute;
+            background-color: #4caf50;
+            transition: left 0.1s ease, top 0.1s ease; /* Smooth movement */
+            border-radius: 2px;
+        }
+        .chat-message {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 3px;
+            background-color: #444;
+            transition: background-color 0.3s;
+        }
+        .chat-message:hover {
+            background-color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div id="game"></div>
+    <div id="chat">
+        <div id="messages"></div>
+        <div id="input">
+            <input type="text" id="messageInput" placeholder="Type a message..." />
+            <button id="sendButton">Send</button>
+        </div>
+        <button id="disconnectButton">Disconnect</button>
+    </div>
+
+    <script>
+        const socket = new WebSocket('ws://localhost:8080');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const disconnectButton = document.getElementById('disconnectButton');
+        const gameCanvas = document.getElementById('game');
+        let  snake = [{ x: 5, y: 5 }];
+        let direction = { x: 0, y: 0 };
+        const gameWidth = Math.floor(gameCanvas.clientWidth / 10); // Game grid width in segments
+        const gameHeight = 40; // Game grid height in segments
+
+        // Initialize the WebSocket connection
+        socket.onopen = () => {
+            console.log("WebSocket connection established.");
+        };
+
+        // Handle incoming messages
+        socket.onmessage = (event) => {
+            const message = event.data;
+            if (message.startsWith('Direction changed:')) {
+                console.log("Direction change received: " + message);
+            } else {
+                const messageElem = document.createElement('div');
+                messageElem.textContent = message;
+                messageElem.className = 'chat-message';
+                messagesDiv.appendChild(messageElem);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll to the latest message
+            }
+        };
+
+        // Send chat messages
+        sendButton.onclick = () => {
+            const message = messageInput.value;
+            if (message) {
+                socket.send(message);
+                // Create a new message element
+                const messageElem = document.createElement('div');
+                messageElem.textContent = "You: " + message;
+                messageElem.className = 'chat-message';
+                messagesDiv.appendChild(messageElem);
+
+                messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll to the latest message
+                messageInput.value = ''; // Clear input field
+        
+            }
+        };
+
+        // Handle 'Enter' key for sending messages
+        messageInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                sendButton.click(); // Trigger the send button click
+            }
+        });
+
+        // Disconnect from the server
+        disconnectButton.onclick = () => {
+            socket.close();
+            alert("Disconnected from server.");
+        };
+
+        // Draw the snake on the game canvas
+        function draw() {
+            gameCanvas.innerHTML = ''; // Clear previous drawings
+            snake.forEach(segment => {
+                const segmentElem = document.createElement('div');
+                segmentElem.className = 'snake-segment';
+                segmentElem.style.width = '10px';
+                segmentElem.style.height = '10px';
+                segmentElem.style.left = `${segment.x * 10}px`;
+                segmentElem.style.top = `${segment.y * 10}px`;
+                gameCanvas.appendChild(segmentElem);
+            });
+        }
+
+        // Move the snake
+        function moveSnake() {
+            const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
+            
+            // Check for boundary collisions
+            if (head.x < 0 || head.x >= gameWidth || head.y < 0 || head.y >= gameHeight) {
+                alert("Game Over! You crossed the boundary.");
+                resetGame();
+                return;
+            }
+
+            snake.unshift(head); // Add new head
+            snake.pop(); // Remove tail
+            draw();
+        }
+
+        // Reset the game
+        function resetGame() {
+            snake = [{ x: 5, y: 5 }]; // Reset snake position
+            direction = { x: 0, y: 0 }; // Reset direction
+            draw(); // Redraw the game
+        }
+
+        // Change the snake's direction
+        function changeDirection(newDirection) {
+            direction = newDirection;
+            socket.send(`Direction changed: ${JSON.stringify(direction)}`); // Send direction change to server
+        }
+
+        // Handle key presses for direction change
+        window.addEventListener('keydown', (event) => {
+            switch (event.key) {
+                case 'ArrowUp':
+                    changeDirection({ x: 0, y: -1 });
+                    break;
+                case 'ArrowDown':
+                    changeDirection({ x: 0, y: 1 });
+                    break;
+                case 'ArrowLeft':
+                    changeDirection({ x: -1, y: 0 });
+                    break;
+                case 'ArrowRight':
+                    changeDirection({ x: 1, y: 0 });
+                    break;
+            }
+        });
+
+        // Update the game every 100ms
+        setInterval(moveSnake, 100);
+        draw(); // Initial draw
+    </script>
+</body>
+</html>
